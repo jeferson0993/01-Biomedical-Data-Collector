@@ -76,7 +76,9 @@ async def get_collection(
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> Collection:
     result = await session.execute(
-        select(Collection).where(Collection.id == collection_id)
+        select(Collection)
+        .options(selectinload(Collection.datasets))
+        .where(Collection.id == collection_id)
     )
     collection = result.scalar_one_or_none()
     if collection is None:
