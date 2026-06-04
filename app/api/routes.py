@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.collectors.uniprot.collector import UniProtCollector
 from app.database import get_session
@@ -48,7 +49,7 @@ async def list_collections(
     offset: int = Query(0, ge=0),  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict[str, object]:
-    query = select(Collection)
+    query = select(Collection).options(selectinload(Collection.datasets))
     count_query = select(func.count(Collection.id))
 
     if source is not None:
