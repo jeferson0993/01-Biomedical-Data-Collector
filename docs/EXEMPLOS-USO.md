@@ -226,8 +226,7 @@ Resposta com datasets:
 
 ## 4. Upload de Arquivos
 
-Faça upload de um arquivo do seu computador diretamente para o MinIO via API.
-Útil para enviar arquivos FASTA, FASTQ, TXT, ou qualquer dado complementar.
+Faça upload de um arquivo do seu computador diretamente para o MinIO via API. Útil para enviar arquivos FASTA, FASTQ, TXT, ou qualquer dado complementar.
 
 ### 4.1 Upload de arquivo
 
