@@ -57,18 +57,36 @@ async def test_uniprot_batch() -> None:
 
 def _setup_create(mock_session: AsyncMock) -> None:
     """Configure mock_session to handle a create-collection flow."""
-    mock_session.add = MagicMock()
+    created_col: Collection | None = None
+
+    def _add(obj: object) -> None:
+        nonlocal created_col
+        if isinstance(obj, Collection):
+            created_col = obj
+
+    mock_session.add = MagicMock(side_effect=_add)
+    mock_session.commit = AsyncMock()
 
     def _refresh(obj: object) -> None:
-        if isinstance(obj, Collection):
+        if isinstance(obj, Collection) and obj.id is None:
             now = datetime.now()
             obj.id = uuid.uuid4()
             obj.created_at = now
             obj.updated_at = now
 
     mock_session.refresh = AsyncMock(side_effect=_refresh)
-    mock_session.commit = AsyncMock()
-    mock_session.execute = AsyncMock(return_value=MagicMock())
+
+    async def _execute(_stmt: object) -> MagicMock:
+        result = MagicMock()
+        if created_col:
+            now = datetime.now()
+            created_col.id = uuid.uuid4()
+            created_col.created_at = now
+            created_col.updated_at = now
+        result.scalar_one.return_value = created_col
+        return result
+
+    mock_session.execute = AsyncMock(side_effect=_execute)
 
 
 @pytest.mark.asyncio

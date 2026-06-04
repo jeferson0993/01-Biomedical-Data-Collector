@@ -35,7 +35,13 @@ async def create_collection(
     )
     session.add(collection)
     await session.commit()
-    await session.refresh(collection)
+
+    result = await session.execute(
+        select(Collection)
+        .where(Collection.id == collection.id)
+        .options(selectinload(Collection.datasets))
+    )
+    collection = result.scalar_one()
 
     background_tasks.add_task(run_collection, collection.id)
     return collection
@@ -116,7 +122,13 @@ async def upload_file(
     session.add(dataset)
     collection.raw_path = f"upload/{collection.id}"
     await session.commit()
-    await session.refresh(collection)
+
+    result = await session.execute(
+        select(Collection)
+        .where(Collection.id == collection.id)
+        .options(selectinload(Collection.datasets))
+    )
+    collection = result.scalar_one()
 
     return collection
 
