@@ -1,95 +1,95 @@
-# Projeto 1 — Biomedical Data Collector + Data Lake
+# Project 1 — Biomedical Data Collector + Data Lake
 
-API assíncrona (FastAPI) para coleta automatizada de dados de repositórios públicos de bioinformática, com armazenamento imutável em MinIO e metadados em PostgreSQL.
+Async API (FastAPI) for automated data collection from public bioinformatics repositories, with immutable storage in MinIO and metadata in PostgreSQL.
 
-> ⚠️ **Projeto independente** — pode ser usado sozinho ou como parte da Plataforma Integrada de Bioinformática. Esta documentação cobre ambos os cenários.
-
----
-
-## Dependências
-
-| Recurso | Obrigatório | Fornecido por |
-|---------|-------------|---------------|
-| PostgreSQL 16 | Sim | `postgres:16-alpine` (container) |
-| MinIO | Sim | `minio/minio` (container) |
-| Rede Docker `bioinfo-platform-net` | Sim | `docker network create` ou compose raiz |
-| Python 3.12+ | Apenas dev | — |
-| `uv` | Apenas dev | `pip install uv` |
-
-### Portas utilizadas
-
-| Porta | Serviço | Observação |
-|-------|---------|------------|
-| 5432 | PostgreSQL | Apenas interno da rede Docker |
-| 9000 | MinIO (API S3) | Apenas interno |
-| 9001 | MinIO (Console) | Apenas interno |
-| 8000 | API | Exposta para o host |
+> ⚠️ **Independent project** — can be used standalone or as part of the Integrated Bioinformatics Platform. This documentation covers both scenarios.
 
 ---
 
-## Configuração
+## Dependencies
 
-### 1. Rede Docker
+| Resource | Required | Provided by |
+|----------|----------|-------------|
+| PostgreSQL 16 | Yes | `postgres:16-alpine` (container) |
+| MinIO | Yes | `minio/minio` (container) |
+| Docker network `bioinfo-platform-net` | Yes | `docker network create` or root compose |
+| Python 3.12+ | Dev only | — |
+| `uv` | Dev only | `pip install uv` |
 
-A rede `bioinfo-platform-net` deve existir **antes** de subir qualquer container:
+### Ports used
+
+| Port | Service | Note |
+|------|---------|------|
+| 5432 | PostgreSQL | Internal to Docker network only |
+| 9000 | MinIO (S3 API) | Internal only |
+| 9001 | MinIO (Console) | Internal only |
+| 8000 | API | Exposed to host |
+
+---
+
+## Configuration
+
+### 1. Docker network
+
+The `bioinfo-platform-net` network must exist **before** starting any container:
 
 ```bash
 docker network create bioinfo-platform-net
 ```
 
-### 2. Variáveis de ambiente
+### 2. Environment variables
 
 ```bash
 cp .env.example .env
-# Edite .env com suas credenciais
+# Edit .env with your credentials
 ```
 
-Variáveis disponíveis no `.env.example`:
+Variables available in `.env.example`:
 
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `DATABASE_URL` | `postgresql+asyncpg://platform:platform@postgres:5432/platform` | Conexão com PostgreSQL |
-| `MINIO_ENDPOINT` | `minio:9000` | Endereço do MinIO (nome do container) |
-| `MINIO_ACCESS_KEY` | `minioadmin` | Access key MinIO |
-| `MINIO_SECRET_KEY` | `minioadmin` | Secret key MinIO |
-| `MINIO_BUCKET` | `raw` | Bucket para dados brutos |
-| `MINIO_SECURE` | `false` | Usar TLS para MinIO |
-| `NCBI_API_KEY` | — | Chave de API NCBI (opcional, aumenta limite de 3 req/s para 10 req/s) |
-| `NCBI_EMAIL` | seu email | Email obrigatório para E-utilities |
-| `DOMAIN` | `localhost` | Domínio usado pelo CORS |
-| `LOG_LEVEL` | `INFO` | Nível de logging |
-| `POSTGRES_USER/PASSWORD/DB` | `platform` | Usado pelo container PostgreSQL |
-| `MINIO_ROOT_USER/PASSWORD` | `minioadmin` | Usado pelo container MinIO |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql+asyncpg://platform:platform@postgres:5432/platform` | PostgreSQL connection string |
+| `MINIO_ENDPOINT` | `minio:9000` | MinIO address (container name) |
+| `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
+| `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
+| `MINIO_BUCKET` | `raw` | Bucket for raw data |
+| `MINIO_SECURE` | `false` | Use TLS for MinIO |
+| `NCBI_API_KEY` | — | NCBI API key (optional, raises limit from 3 req/s to 10 req/s) |
+| `NCBI_EMAIL` | your email | Email required for E-utilities |
+| `DOMAIN` | `localhost` | Domain used by CORS |
+| `LOG_LEVEL` | `INFO` | Logging level |
+| `POSTGRES_USER/PASSWORD/DB` | `platform` | Used by PostgreSQL container |
+| `MINIO_ROOT_USER/PASSWORD` | `minioadmin` | Used by MinIO container |
 
-> **Importante:** Em produção, altere todas as senhas padrão e use `MINIO_SECURE=true` com certificados.
+> **Important:** In production, change all default passwords and set `MINIO_SECURE=true` with certificates.
 
 ---
 
-## Cenário A — Plataforma completa (recomendado)
+## Scenario A — Full platform (recommended)
 
-Usa o docker-compose raiz da plataforma, que fornece PostgreSQL + MinIO + rede.
+Uses the platform's root docker-compose, which provides PostgreSQL + MinIO + network.
 
 ```bash
-# 1. Na raiz da plataforma, sobe a infraestrutura compartilhada
+# 1. At the platform root, start the shared infrastructure
 cd ..
 docker compose up -d postgres minio createbuckets
 
-# 2. Volta para este projeto e sobe a API
+# 2. Return to this project and start the API
 cd 01-coleta-dados
 docker compose up -d --build
 
-# 3. Executa migrações
+# 3. Run migrations
 docker compose exec api alembic upgrade head
 
-# 4. Testa
+# 4. Test
 curl http://localhost:8000/health
 ```
 
 ---
 
-## Cenário B — Projeto standalone
+## Scenario B — Standalone project
 
-Para executar apenas este projeto com suas próprias instâncias de PostgreSQL e MinIO, crie um `docker-compose.standalone.yml`:
+To run only this project with its own PostgreSQL and MinIO instances, create a `docker-compose.standalone.yml`:
 
 ```yaml
 name: bioinfo-01-coleta-dados
@@ -173,16 +173,16 @@ networks:
 ```
 
 ```bash
-# 1. Criar rede (apenas na primeira vez)
+# 1. Create network (first time only)
 docker network create bioinfo-platform-net
 
-# 2. Subir tudo
+# 2. Start everything
 docker compose -f docker-compose.standalone.yml up -d --build
 
-# 3. Executar migrações
+# 3. Run migrations
 docker compose -f docker-compose.standalone.yml exec api alembic upgrade head
 
-# 4. Testar
+# 4. Test
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/collections \
   -H "Content-Type: application/json" \
@@ -191,7 +191,7 @@ curl -X POST http://localhost:8000/collections \
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────┐
@@ -208,26 +208,26 @@ curl -X POST http://localhost:8000/collections \
                     └──────────────┘
 ```
 
-### Fluxo de coleta
+### Collection flow
 
 ```
 POST /collections { source, external_id }
-  → Cria Collection(status=pending) no PostgreSQL
-  → Dispara background task:
+  → Creates Collection(status=pending) in PostgreSQL
+  → Triggers background task:
     1. status = running
-    2. Coletor.fetch() → dados da fonte externa (com retry + backoff)
-    3. Rate limiting automático entre requisições
-    4. Upload para MinIO: raw/{source}/{external_id}/
-    5. Gera metadata.json com checksums SHA-256 lado a lado
-    6. Aplica tags MinIO (source, external_id) em cada objeto
-    7. Insere Dataset records
-    8. status = completed (ou failed + error_message)
-  → Retorna 201 com collection_id
+    2. Collector.fetch() → data from external source (with retry + backoff)
+    3. Automatic rate limiting between requests
+    4. Upload to MinIO: raw/{source}/{external_id}/
+    5. Generates metadata.json with SHA-256 checksums alongside
+    6. Applies MinIO tags (source, external_id) on each object
+    7. Inserts Dataset records
+    8. status = completed (or failed + error_message)
+  → Returns 201 with collection_id
 ```
 
 ---
 
-## Estrutura do projeto
+## Project structure
 
 ```
 01-coleta-dados/
@@ -251,12 +251,12 @@ POST /collections { source, external_id }
 │   └── versions/
 │       ├── 0001_initial_schema.py
 │       └── 0002_add_upload_source.py
-├── tests/                       # 35 testes (pytest + respx)
+├── tests/                       # 35 tests (pytest + respx)
 │   ├── test_api/
 │   ├── test_collectors/
 │   ├── test_storage/
 │   └── test_tasks/
-├── docker-compose.yml           # Apenas API (usa rede externa)
+├── docker-compose.yml           # API only (uses external network)
 ├── Dockerfile
 ├── .env.example
 ├── pyproject.toml
@@ -267,33 +267,33 @@ POST /collections { source, external_id }
 
 ## Endpoints
 
-| Método | Caminho | Descrição |
-|--------|---------|----------|
-| `GET` | `/health` | Healthcheck (verifica PostgreSQL + MinIO) |
-| `POST` | `/collections` | Disparar coleta |
-| `GET` | `/collections` | Listar coleções (`?source=&status=&limit=&offset=`) |
-| `GET` | `/collections/{id}` | Detalhes da coleta + datasets |
-| `POST` | `/collections/upload` | Upload manual de arquivo |
-| `GET` | `/collections/{id}/download/{dataset_id}` | Download de dataset |
-| `POST` | `/collections/uniprot/batch` | Consulta UniProt em lote |
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Healthcheck (verifies PostgreSQL + MinIO) |
+| `POST` | `/collections` | Trigger collection |
+| `GET` | `/collections` | List collections (`?source=&status=&limit=&offset=`) |
+| `GET` | `/collections/{id}` | Collection details + datasets |
+| `POST` | `/collections/upload` | Manual file upload |
+| `GET` | `/collections/{id}/download/{dataset_id}` | Dataset download |
+| `POST` | `/collections/uniprot/batch` | Batch UniProt query |
 
-### Exemplos
+### Examples
 
 ```bash
-# Criar coleta
+# Create collection
 curl -X POST http://localhost:8000/collections \
   -H "Content-Type: application/json" \
   -d '{"source": "geo", "external_id": "GSE12345"}'
 
-# Listar coleções
+# List collections
 curl "http://localhost:8000/collections?source=geo&limit=5"
 
-# Upload manual
+# Manual upload
 curl -X POST http://localhost:8000/collections/upload \
-  -F "file=@meus_dados.fasta"
+  -F "file=@my_data.fasta"
 
 # Download
-curl -o dados.txt \
+curl -o data.txt \
   "http://localhost:8000/collections/{id}/download/{dataset_id}"
 
 # UniProt batch
@@ -304,47 +304,47 @@ curl -X POST http://localhost:8000/collections/uniprot/batch \
 
 ---
 
-## Coletores
+## Collectors
 
-| Coletor | Fonte | Formato | Autenticação | Rate limit |
-|---------|-------|---------|-------------|------------|
-| GEO | `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi` | SOFT text | Pública | 10 req/s |
-| NCBI Gene | E-utilities (`esummary` + `efetch`) | XML | API Key (opcional) | 10 req/s |
-| PubMed | E-utilities (`esummary` + `efetch`) | XML | API Key (opcional) | 10 req/s |
-| UniProt | `https://rest.uniprot.org/uniprotkb/` | XML + FASTA | Pública | 10 req/s |
+| Collector | Source | Format | Authentication | Rate limit |
+|-----------|--------|--------|----------------|------------|
+| GEO | `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi` | SOFT text | Public | 10 req/s |
+| NCBI Gene | E-utilities (`esummary` + `efetch`) | XML | API Key (optional) | 10 req/s |
+| PubMed | E-utilities (`esummary` + `efetch`) | XML | API Key (optional) | 10 req/s |
+| UniProt | `https://rest.uniprot.org/uniprotkb/` | XML + FASTA | Public | 10 req/s |
 
-> O rate limit é configurável via `RATE_LIMIT_MAX_CALLS` e `RATE_LIMIT_PERIOD_SECONDS`.
-> Com `NCBI_API_KEY`, o NCBI permite 10 req/s em vez de 3 req/s sem chave.
+> Rate limit is configurable via `RATE_LIMIT_MAX_CALLS` and `RATE_LIMIT_PERIOD_SECONDS`.
+> With `NCBI_API_KEY`, NCBI allows 10 req/s instead of 3 req/s without a key.
 
 ---
 
-## Desenvolvimento (sem Docker)
+## Development (without Docker)
 
 ```bash
-# Dependências
+# Dependencies
 pip install uv
 uv sync --group dev
 
-# Executar PostgreSQL + MinIO localmente (Docker)
+# Run PostgreSQL + MinIO locally (Docker)
 docker run -d --name pg -e POSTGRES_PASSWORD=platform -p 5432:5432 postgres:16-alpine
 docker run -d --name minio -p 9000:9000 -p 9001:9001 \
   -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
   minio/minio server /data --console-address ":9001"
 
-# Configurar
+# Configure
 cp .env.example .env
-# Ajuste DATABASE_URL para localhost se o PG estiver no host
+# Adjust DATABASE_URL to localhost if PG is on host
 
-# Migrar
+# Migrate
 alembic upgrade head
 
-# Rodar
+# Run
 uv run uvicorn app.main:app --reload
 
-# Testar
+# Test
 curl http://localhost:8000/health
 
-# Qualidade
+# Quality
 uv run ruff check app/ tests/
 uv run mypy app/
 uv run pytest tests/ -v
@@ -352,37 +352,37 @@ uv run pytest tests/ -v
 
 ---
 
-## Comandos úteis
+## Useful commands
 
 ```bash
-# Acessar banco
+# Access database
 docker compose exec postgres psql -U platform -d platform
 
-# Ver logs da API
+# View API logs
 docker compose logs -f api
 
-# Listar objetos no MinIO
+# List MinIO objects
 docker compose exec minio mc ls local/raw/
 
-# Shell no container da API
+# Shell into API container
 docker compose exec api bash
 
-# rebuild + restart
+# Rebuild + restart
 docker compose up -d --build api
 ```
 
 ---
 
-## Tecnologias
+## Technologies
 
 - **Python 3.12+**, FastAPI, SQLAlchemy 2.0 async, Pydantic v2
 - **PostgreSQL 16** (asyncpg), **MinIO** (minio-py)
-- **httpx** (client HTTP async), **respx** (mock em testes)
-- **ruff**, **mypy** (qualidade), **pytest** (testes)
+- **httpx** (async HTTP client), **respx** (test mocking)
+- **ruff**, **mypy** (quality), **pytest** (testing)
 - **Docker Compose**, **uv** (package manager)
 
 ---
 
-## Licença
+## License
 
-Projeto interno — Plataforma Integrada de Bioinformática.
+Internal project — Integrated Bioinformatics Platform.
