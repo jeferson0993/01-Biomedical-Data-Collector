@@ -133,6 +133,44 @@ async def upload_file(
     return collection
 
 
+@router.delete("", status_code=200)
+async def delete_all_collections(
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict[str, object]:
+    result = await session.execute(
+        select(Collection).options(selectinload(Collection.datasets))
+    )
+    collections = list(result.scalars().all())
+    for col in collections:
+        for ds in col.datasets:
+            object_name = ds.minio_path.removeprefix(f"{_minio.bucket}/")
+            await _minio.delete(object_name)
+        await session.delete(col)
+    await session.commit()
+    return {"deleted": len(collections)}
+
+
+@router.delete("/{collection_id}", status_code=200)
+async def delete_collection(
+    collection_id: UUID,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> dict[str, object]:
+    result = await session.execute(
+        select(Collection)
+        .options(selectinload(Collection.datasets))
+        .where(Collection.id == collection_id)
+    )
+    collection = result.scalar_one_or_none()
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    for ds in collection.datasets:
+        object_name = ds.minio_path.removeprefix(f"{_minio.bucket}/")
+        await _minio.delete(object_name)
+    await session.delete(collection)
+    await session.commit()
+    return {"deleted": 1}
+
+
 @router.get("/{collection_id}/download/{dataset_id}")
 async def download_dataset(
     collection_id: UUID,

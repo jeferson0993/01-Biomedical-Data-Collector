@@ -223,3 +223,115 @@ async def test_download_dataset_success(
     assert response.status_code == 200
     assert response.content == b"file content"
     assert "attachment" in response.headers["content-disposition"]
+
+
+def _make_mock_dataset(minio_path: str) -> MagicMock:
+    ds = MagicMock(spec=Dataset)
+    ds.minio_path = minio_path
+    return ds
+
+
+def _make_mock_collection(datasets: list[MagicMock] | None = None) -> MagicMock:
+    col = MagicMock(spec=Collection)
+    col.datasets = datasets or []
+    return col
+
+
+@patch("app.api.routes._minio")
+@pytest.mark.asyncio
+async def test_delete_all_collections(
+    mock_minio: MagicMock,
+    mock_session: AsyncMock,
+) -> None:
+    mock_minio.bucket = "test_bucket"
+    mock_minio.delete = AsyncMock()
+
+    ds1 = _make_mock_dataset("test_bucket/geo/GSE1/file.txt")
+    ds2 = _make_mock_dataset("test_bucket/ncbi/3569/file.fasta")
+    col1 = _make_mock_collection([ds1, ds2])
+    col2 = _make_mock_collection([])
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [col1, col2]
+    mock_session.execute.return_value = mock_result
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/collections")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deleted"] == 2
+    assert mock_minio.delete.call_count == 2
+    mock_minio.delete.assert_any_await("geo/GSE1/file.txt")
+    mock_minio.delete.assert_any_await("ncbi/3569/file.fasta")
+    assert mock_session.delete.call_count == 2
+
+
+@patch("app.api.routes._minio")
+@pytest.mark.asyncio
+async def test_delete_all_collections_empty(
+    mock_minio: MagicMock,
+    mock_session: AsyncMock,
+) -> None:
+    mock_minio.bucket = "test_bucket"
+    mock_minio.delete = AsyncMock()
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_session.execute.return_value = mock_result
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/collections")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deleted"] == 0
+    mock_minio.delete.assert_not_called()
+    mock_session.delete.assert_not_called()
+
+
+@patch("app.api.routes._minio")
+@pytest.mark.asyncio
+async def test_delete_collection(
+    mock_minio: MagicMock,
+    mock_session: AsyncMock,
+) -> None:
+    mock_minio.bucket = "test_bucket"
+    mock_minio.delete = AsyncMock()
+
+    ds = _make_mock_dataset("test_bucket/pubmed/123/file.xml")
+    col = _make_mock_collection([ds])
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = col
+    mock_session.execute.return_value = mock_result
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/collections/00000000-0000-0000-0000-000000000000")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deleted"] == 1
+    mock_minio.delete.assert_awaited_with("pubmed/123/file.xml")
+    mock_session.delete.assert_called_with(col)
+
+
+@patch("app.api.routes._minio")
+@pytest.mark.asyncio
+async def test_delete_collection_not_found(
+    mock_minio: MagicMock,
+    mock_session: AsyncMock,
+) -> None:
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/collections/00000000-0000-0000-0000-000000000000")
+
+    assert response.status_code == 404
+    mock_minio.delete.assert_not_called()
