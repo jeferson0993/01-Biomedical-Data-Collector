@@ -5,9 +5,12 @@ RUN pip install uv --no-cache-dir
 WORKDIR /app
 
 COPY pyproject.toml .
-RUN uv sync --no-dev --no-cache
+RUN uv sync --no-dev --no-cache --no-install-project
 
 COPY app/ /app/app/
+COPY alembic.ini .
+COPY alembic/ /app/alembic/
+RUN uv sync --no-dev --no-cache
 
 EXPOSE 8000
 

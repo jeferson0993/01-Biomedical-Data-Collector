@@ -8,6 +8,7 @@ class SourceType(enum.StrEnum):
     ncbi_gene = "ncbi_gene"
     pubmed = "pubmed"
     uniprot = "uniprot"
+    upload = "upload"
 
 
 class CollectionStatus(enum.StrEnum):

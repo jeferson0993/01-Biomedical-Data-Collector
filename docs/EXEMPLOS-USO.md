@@ -63,7 +63,9 @@ e para `completed` quando termina.
 
 ### 2.2 Coletar um gene do NCBI
 
-O NCBI Gene usa identificadores numéricos. **Exemplo:** gene TP53 (id 7157):
+O NCBI Gene usa identificadores numéricos.
+
+**Exemplo 1:** gene TP53 (id 7157):
 
 ```bash
 curl -X POST http://localhost:8000/collections \
@@ -71,6 +73,17 @@ curl -X POST http://localhost:8000/collections \
   -d '{
     "source": "ncbi_gene",
     "external_id": "7157"
+  }'
+```
+
+**Exemplo 2:** gene IL6 (id 3569):
+
+```bash
+curl -X POST http://localhost:8000/collections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "ncbi_gene",
+    "external_id": "3569"
   }'
 ```
 
@@ -211,7 +224,70 @@ Resposta com datasets:
 
 ---
 
-## 4. Estrutura no MinIO
+## 4. Upload de Arquivos
+
+Faça upload de um arquivo do seu computador diretamente para o MinIO via API.
+Útil para enviar arquivos FASTA, FASTQ, TXT, ou qualquer dado complementar.
+
+### 4.1 Upload de arquivo
+
+```bash
+curl -X POST http://localhost:8000/upload \
+  -F "file=@/caminho/para/meu_gene.fasta"
+```
+
+Resposta esperada (201 Created):
+
+```json
+{
+  "id": "uuid-da-colecao",
+  "source": "upload",
+  "external_id": "meu_gene.fasta",
+  "status": "completed",
+  "raw_path": "upload/uuid-da-colecao",
+  "datasets": [
+    {
+      "id": "uuid-do-dataset",
+      "filename": "meu_gene.fasta",
+      "format": "fasta",
+      "file_size": 1234,
+      "checksum_sha256": null,
+      "minio_path": "raw/upload/uuid-da-colecao/meu_gene.fasta"
+    }
+  ],
+  ...
+}
+```
+
+O arquivo é armazenado no bucket `raw/upload/{collection_id}/{filename}`.
+
+### 4.2 Download de arquivo
+
+Para baixar um arquivo de uma coleta (upload ou coleta automática):
+
+```bash
+# Obter o ID da coleta e o ID do dataset
+curl -s http://localhost:8000/collections/{collection_id} | jq '.datasets[] | {id, filename}'
+
+# Baixar o arquivo
+curl -O http://localhost:8000/collections/{collection_id}/download/{dataset_id}
+```
+
+Exemplo completo:
+
+```bash
+# 1. Fazer upload
+UPLOAD=$(curl -s -X POST http://localhost:8000/upload -F "file=@dados.fasta")
+COLLECTION_ID=$(echo "$UPLOAD" | jq -r '.id')
+DATASET_ID=$(echo "$UPLOAD" | jq -r '.datasets[0].id')
+
+# 2. Baixar o arquivo de volta
+curl -o baixado.fasta "http://localhost:8000/collections/$COLLECTION_ID/download/$DATASET_ID"
+```
+
+---
+
+## 5. Estrutura no MinIO
 
 Quando uma coleta é concluída, os dados são armazenados no MinIO dentro do
 bucket `raw` na seguinte estrutura:
@@ -232,10 +308,14 @@ raw/
 │       ├── 12345678_summary.xml
 │       ├── 12345678_full.xml
 │       └── metadata.json
-└── uniprot/
-    └── P04637/
-        ├── P04637.xml
-        ├── P04637.fasta
+├── uniprot/
+│   └── P04637/
+│       ├── P04637.xml
+│       ├── P04637.fasta
+│       └── metadata.json
+└── upload/
+    └── {collection_id}/
+        ├── meu_arquivo.fasta
         └── metadata.json
 ```
 
@@ -255,9 +335,9 @@ padronizado:
 
 ---
 
-## 5. Exemplos de Código
+## 6. Exemplos de Código
 
-### 5.1 Python com httpx
+### 6.1 Python com httpx
 
 ```python
 import httpx
@@ -283,7 +363,7 @@ while True:
     time.sleep(2)
 ```
 
-### 5.2 Python com o cliente assíncrono
+### 6.2 Python com o cliente assíncrono
 
 ```python
 import asyncio
@@ -311,7 +391,7 @@ async def collect_and_wait():
 asyncio.run(collect_and_wait())
 ```
 
-### 5.3 Bash com jq
+### 6.3 Bash com jq
 
 ```bash
 #!/usr/bin/env bash
@@ -342,9 +422,9 @@ curl -s "$API/collections/$ID" | jq '.datasets[] | {filename, minio_path}'
 
 ---
 
-## 6. Cenários de Uso
+## 7. Cenários de Uso
 
-### 6.1 Pipeline: Coletar gene → analisar variantes
+### 7.1 Pipeline: Coletar gene → analisar variantes
 
 ```bash
 # 1. Coletar gene TP53
@@ -366,7 +446,7 @@ curl -s -X POST http://localhost:8000/collections \
 curl -s http://localhost:8000/collections | jq '.items[] | {source, external_id, status}'
 ```
 
-### 6.2 Ambiente de desenvolvimento sem Docker
+### 7.2 Ambiente de desenvolvimento sem Docker
 
 ```bash
 # Instalar dependências
@@ -385,23 +465,27 @@ uv run mypy app/
 uv run ruff check app/ tests/
 ```
 
-### 6.3 Ambiente com Docker Compose
+### 7.3 Ambiente com Docker Compose
 
 ```bash
-# Subir tudo
+# Subir infra compartilhada (postgres + minio + gateway)
 docker compose up -d
 
+# Subir API do Projeto 1
+docker compose -f 01-coleta-dados/docker-compose.yml up -d
+
 # Ver logs da API
-docker compose logs -f api
+docker compose -f 01-coleta-dados/docker-compose.yml logs -f api
 
 # Executar migrations
-docker compose exec api alembic upgrade head
+docker compose -f 01-coleta-dados/docker-compose.yml exec api uv run alembic upgrade head
 
 # Acessar console MinIO
 # http://localhost:9001 (minioadmin / minioadmin)
 
 # Parar tudo
 docker compose down
+docker compose -f 01-coleta-dados/docker-compose.yml down
 
 # Parar e remover volumes (dados são perdidos)
 docker compose down -v
@@ -409,9 +493,9 @@ docker compose down -v
 
 ---
 
-## 7. Tratamento de Erros
+## 8. Tratamento de Erros
 
-### 7.1 Coleta com external_id inválido
+### 8.1 Coleta com external_id inválido
 
 ```bash
 curl -s -X POST http://localhost:8000/collections \
@@ -419,8 +503,7 @@ curl -s -X POST http://localhost:8000/collections \
   -d '{"source": "geo", "external_id": "ID_INEXISTENTE"}'
 ```
 
-A coleta será criada com `status=pending`, mas a tarefa em segundo plano
-falhará e o status mudará para `failed` com uma mensagem de erro:
+A coleta será criada com `status=pending`, mas a tarefa em segundo plano falhará e o status mudará para `failed` com uma mensagem de erro:
 
 ```json
 {
@@ -430,7 +513,7 @@ falhará e o status mudará para `failed` com uma mensagem de erro:
 }
 ```
 
-### 7.2 Fonte inválida
+### 8.2 Fonte inválida
 
 ```bash
 curl -s -X POST http://localhost:8000/collections \
@@ -446,13 +529,13 @@ Resposta (422 Unprocessable Entity):
     {
       "type": "enum",
       "loc": ["body", "source"],
-      "msg": "Input should be 'geo', 'ncbi_gene', 'pubmed' or 'uniprot'"
+      "msg": "Input should be 'geo', 'ncbi_gene', 'pubmed', 'uniprot' or 'upload'"
     }
   ]
 }
 ```
 
-### 7.3 Collection não encontrada
+### 8.3 Collection não encontrada
 
 ```bash
 curl -s http://localhost:8000/collections/00000000-0000-0000-0000-000000000000
@@ -466,7 +549,7 @@ Resposta (404):
 
 ---
 
-## 8. Métricas e Monitoramento
+## 9. Métricas e Monitoramento
 
 O serviço expõe logs estruturados em JSON no stdout. Para visualizar:
 
@@ -474,12 +557,11 @@ O serviço expõe logs estruturados em JSON no stdout. Para visualizar:
 docker compose logs -f api | jq 'select(.level == "ERROR")'
 ```
 
-Para monitoramento com Prometheus/Grafana (planejado para fases futuras),
-os endpoints `/health` podem ser usados como probe de存活idade (liveness).
+Para monitoramento com Prometheus/Grafana (planejado para fases futuras), os endpoints `/health` podem ser usados como probe de存活idade (liveness).
 
 ---
 
-## 9. Boas Práticas
+## 10. Boas Práticas
 
 1. **Rate limiting**: A API respeita os limites definidos em `NCBI_API_KEY`
    e `RATE_LIMIT_MAX_CALLS` no `.env`. Com `api_key`, o NCBI permite 10 req/s;
