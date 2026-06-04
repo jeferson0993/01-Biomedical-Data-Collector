@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.collectors.uniprot.collector import UniProtCollector
 from app.database import get_session
 from app.models.collection import Collection, Dataset
 from app.models.enums import CollectionStatus, SourceType
@@ -130,7 +131,9 @@ async def download_dataset(
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    data = await _minio.download(dataset.minio_path)
+    prefix = f"{_minio.bucket}/"
+    object_name = dataset.minio_path.removeprefix(prefix)
+    data = await _minio.download(object_name)
 
     media_types = {
         "xml": "application/xml",
@@ -155,3 +158,29 @@ async def download_dataset(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{dataset.filename}"'},
     )
+
+
+@router.post("/uniprot/batch", status_code=200)
+async def uniprot_batch(
+    accessions: list[str],
+) -> dict[str, object]:
+    collector = UniProtCollector()
+    results: list[dict[str, object]] = []
+    for acc in accessions:
+        try:
+            files = await collector.fetch(acc)
+            results.append({
+                "accession": acc,
+                "success": True,
+                "files": [f for _, f in files],
+                "error": None,
+            })
+        except Exception as exc:
+            results.append({
+                "accession": acc,
+                "success": False,
+                "files": [],
+                "error": str(exc),
+            })
+    successes = sum(1 for r in results if r["success"])
+    return {"results": results, "total": len(results), "success_count": successes}

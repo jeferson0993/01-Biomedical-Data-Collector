@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from app.models.collection import Collection, Dataset
 from app.models.enums import CollectionStatus, SourceType
 

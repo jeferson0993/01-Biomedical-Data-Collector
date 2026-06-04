@@ -14,11 +14,12 @@ async def retry_async(  # noqa: UP047
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 30.0,
+    **kwargs: object,
 ) -> T:
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
-            return await fn(*args)
+            return await fn(*args, **kwargs)
         except Exception as exc:
             last_exc = exc
             if attempt < max_retries:

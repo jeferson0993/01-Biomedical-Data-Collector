@@ -11,11 +11,13 @@ class GEOCollector(AbstractCollector):
     source = "geo"
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+        super().__init__()
         self._client = client or _client
 
     async def fetch(
         self, external_id: str, _params: dict[str, object] | None = None
     ) -> list[tuple[bytes, str]]:
+        await self._wait_for_slot()
         url = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi"
         query_params: dict[str, str] = {
             "acc": external_id,

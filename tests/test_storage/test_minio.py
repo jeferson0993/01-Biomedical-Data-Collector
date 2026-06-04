@@ -21,12 +21,15 @@ def test_upload_result_dataclass() -> None:
         object_name="test/file.txt",
         etag="abc123",
         version_id=None,
+        checksum_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     )
     assert result.minio_path == "raw/test/file.txt"
     assert result.bucket == "raw"
     assert result.object_name == "test/file.txt"
     assert result.etag == "abc123"
     assert result.version_id is None
+    expected = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    assert result.checksum_sha256 == expected
 
 
 @patch("app.storage.minio_client.Minio", return_value=MagicMock(spec=Minio))
@@ -48,6 +51,6 @@ async def test_object_exists_true(_mock_minio: MagicMock) -> None:
 @patch("app.storage.minio_client.Minio", return_value=MagicMock(spec=Minio))
 async def test_object_exists_false(_mock_minio: MagicMock) -> None:
     client = MinioClient()
-    client.client.stat_object = MagicMock(side_effect=_make_s3error())
-    exists = await client.object_exists("missing.txt")
+    with patch.object(client.client, "stat_object", side_effect=_make_s3error()):
+        exists = await client.object_exists("missing.txt")
     assert exists is False

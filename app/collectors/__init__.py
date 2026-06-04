@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from app.collectors.base import AbstractCollector, CollectResult
 from app.collectors.geo.collector import GEOCollector
 from app.collectors.ncbi_gene.collector import NCBIGeneCollector

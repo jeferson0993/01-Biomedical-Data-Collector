@@ -18,6 +18,7 @@ class NCBIGeneCollector(AbstractCollector):
         email: str = "",
         client: httpx.AsyncClient | None = None,
     ) -> None:
+        super().__init__()
         self._api_key = api_key
         self._email = email
         self._client = client or _client
@@ -35,6 +36,7 @@ class NCBIGeneCollector(AbstractCollector):
     ) -> list[tuple[bytes, str]]:
         common = self._common_params()
         esummary_params = {"db": "gene", "id": external_id, **common}
+        await self._wait_for_slot()
         response = await self._client.get(
             f"{self.BASE}/esummary.fcgi",
             params=esummary_params,
@@ -42,6 +44,7 @@ class NCBIGeneCollector(AbstractCollector):
         response.raise_for_status()
 
         efetch_params = {"db": "gene", "id": external_id, "rettype": "xml", **common}
+        await self._wait_for_slot()
         response_full = await self._client.get(
             f"{self.BASE}/efetch.fcgi",
             params=efetch_params,

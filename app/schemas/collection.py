@@ -3,14 +3,19 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import CollectionStatus, SourceType
 
 
 class CollectionCreate(BaseModel):
     source: SourceType
-    external_id: str
+    external_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+    )
     params: dict[str, object] | None = None
 
 

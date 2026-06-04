@@ -19,6 +19,8 @@ class Settings(BaseSettings):
 
     uniprot_base_url: str = "https://rest.uniprot.org"
 
+    domain: str = "localhost"
+
     log_level: str = "INFO"
 
     rate_limit_max_calls: int = 10

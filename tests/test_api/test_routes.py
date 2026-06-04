@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.database import get_session
 from app.main import app
-from app.models.collection import Collection
+from app.models.collection import Collection, Dataset
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +31,28 @@ def override_get_session(mock_session: AsyncMock) -> None:
     app.dependency_overrides[get_session] = _mock_get_session
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_uniprot_batch() -> None:
+    from app.collectors.uniprot.collector import UniProtCollector
+
+    async def _mock_fetch(acc: str, _params: object = None) -> list[tuple[bytes, str]]:
+        if acc == "BAD":
+            raise ValueError("not found")
+        return [(b"data", f"{acc}.xml"), (b"fasta", f"{acc}.fasta")]
+
+    with patch.object(UniProtCollector, "fetch", side_effect=_mock_fetch):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.post("/collections/uniprot/batch", json=["P12345", "BAD"])
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+    assert data["success_count"] == 1
+    assert data["results"][0]["success"] is True
+    assert data["results"][1]["success"] is False
 
 
 def _setup_create(mock_session: AsyncMock) -> None:
@@ -110,3 +132,76 @@ async def test_create_collection_db_call(mock_session: AsyncMock) -> None:
     assert data["status"] == "pending"
     assert data["external_id"] == "12345678"
     assert "id" in data
+
+
+@patch("app.api.routes._minio.upload")
+@pytest.mark.asyncio
+async def test_upload_file(
+    mock_upload: AsyncMock,
+    mock_session: AsyncMock,
+) -> None:
+    _setup_create(mock_session)
+    mock_upload.return_value = MagicMock(
+        minio_path="raw/upload/uid/file.txt",
+        checksum_sha256="abc",
+        tags={},
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/collections/upload",
+            files={"file": ("test.txt", b"hello world", "text/plain")},
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["source"] == "upload"
+
+
+@pytest.mark.asyncio
+async def test_download_dataset_not_found(mock_session: AsyncMock) -> None:
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get(
+            "/collections/00000000-0000-0000-0000-000000000000/download/"
+            "00000000-0000-0000-0000-000000000000"
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_download_dataset_success(
+    mock_session: AsyncMock,
+) -> None:
+    dataset_id = uuid.uuid4()
+    mock_dataset = MagicMock(spec=Dataset)
+    mock_dataset.id = dataset_id
+    mock_dataset.filename = "test.txt"
+    mock_dataset.format = "txt"
+    mock_dataset.minio_path = "test_bucket/geo/GSE123/file.txt"
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_dataset
+    mock_session.execute.return_value = mock_result
+
+    mock_minio_response = MagicMock()
+    mock_minio_response.read.return_value = b"file content"
+
+    with patch("app.api.routes._minio") as mock_minio:
+        mock_minio.bucket = "test_bucket"
+        mock_minio.download = AsyncMock(return_value=b"file content")
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.get(
+                f"/collections/00000000-0000-0000-0000-000000000000/download/{dataset_id}"
+            )
+
+    assert response.status_code == 200
+    assert response.content == b"file content"
+    assert "attachment" in response.headers["content-disposition"]
