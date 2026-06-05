@@ -28,6 +28,11 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
     _app.state.http_client = httpx.AsyncClient()
     logger.info("Shared HTTP client created")
+
+    mc = MinioClient()
+    await mc.ensure_bucket()
+    logger.info("MinIO bucket '%s' ensured", mc.bucket)
+
     yield
 
     logger.info("Closing shared HTTP client")

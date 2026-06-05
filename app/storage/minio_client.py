@@ -79,6 +79,7 @@ class MinioClient:
     ) -> UploadResult:
         from minio.helpers import ObjectWriteResult
 
+        await self.ensure_bucket()
         checksum = hashlib.sha256(data).hexdigest()
         result: ObjectWriteResult = await self._run(
             self.client.put_object,
