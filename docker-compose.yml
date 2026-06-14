@@ -2,6 +2,7 @@ name: bioinfo-01-coleta-dados
 
 services:
   api:
+    container_name: collector-api
     build: .
     ports:
       - "8000:8000"
