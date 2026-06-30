@@ -14,6 +14,7 @@ from app.config import settings
 from app.database import async_session
 from app.models.collection import Collection, Dataset
 from app.models.enums import CollectionStatus
+from app.services.r_service import RService
 from app.storage.minio_client import MinioClient
 
 logger = logging.getLogger(__name__)
@@ -99,5 +100,20 @@ async def run_collection(collection_id: uuid.UUID) -> None:
 
             await session.commit()
             logger.info("Collection %s completed successfully", collection_id)
+
+        rsvc = RService()
+        meta = {
+            "id": str(collection_id),
+            "source": collection.source.value,
+            "status": "completed",
+            "external_id": collection.external_id,
+            "created_at": str(collection.created_at),
+            "datasets": [
+                {"filename": d.filename, "file_size": d.file_size, "format": d.format}
+                for d in collection.datasets
+            ],
+        }
+        await rsvc.generate_report(collection_id, meta)
+        logger.info("R report generated for collection %s", collection_id)
     except Exception:
         logger.exception("Unexpected error in run_collection for %s", collection_id)

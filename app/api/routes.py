@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,6 +13,7 @@ from app.database import get_session
 from app.models.collection import Collection, Dataset
 from app.models.enums import CollectionStatus, SourceType
 from app.schemas.collection import CollectionCreate, CollectionListOut, CollectionOut
+from app.services.r_service import RService
 from app.storage.minio_client import MinioClient
 from app.tasks import run_collection
 
@@ -211,6 +212,39 @@ async def download_dataset(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{dataset.filename}"'},
     )
+
+
+@router.get("/{collection_id}/report", response_class=HTMLResponse)
+async def get_collection_report(
+    collection_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    result = await session.execute(
+        select(Collection)
+        .options(selectinload(Collection.datasets))
+        .where(Collection.id == collection_id)
+    )
+    collection = result.scalar_one_or_none()
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    meta = {
+        "id": str(collection.id),
+        "source": collection.source.value,
+        "status": collection.status.value,
+        "external_id": collection.external_id,
+        "created_at": str(collection.created_at),
+        "datasets": [
+            {"filename": d.filename, "file_size": d.file_size, "format": d.format}
+            for d in collection.datasets
+        ],
+    }
+
+    rsvc = RService()
+    html = await rsvc.generate_report(collection_id, meta)
+    if html is None:
+        raise HTTPException(status_code=500, detail="Report generation failed")
+    return html
 
 
 @router.post("/uniprot/batch", status_code=200)
